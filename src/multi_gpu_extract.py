@@ -1,8 +1,11 @@
 # coding: utf-8
 
 import os
+import commands
 import argparse
 from multiprocessing import Pool, current_process
+import logging
+from multiprocessing_logging import install_mp_handler
 
 def calc_tvl1_flow(vid_item):
     vid_path = vid_item[0]
@@ -37,21 +40,29 @@ def calc_tvl1_flow(vid_item):
             flow_mode_dict[FLOW_TYPE], vid_path, cur_flow_x_path+'/flow_x', cur_flow_y_path+'/flow_y', cur_img_path+'/img' if KEEP_FRAMES else '/dev/null', STEP, dev_id, WIDTH, HEIGHT, OUT_FMT
         )
 
-    os.system(command)
-    print '{}/{} {} finished!'.format(vid_idx, VID_NUM, vid_name)
+    shell_output = commands.getstatusoutput(command)
+    if 'no frame' not in shell_output[1]:
+        log_info = '{}/{} {} finished!'.format(vid_idx, VID_NUM, vid_name)
+        print log_info
+        logging.info(log_info)
+    else:
+        log_info = '>>> Errors occurred when parsing video {}/{} {} <<<'.format(vid_idx, VID_NUM, vid_name)
+        print log_info
+        logging.error(log_info)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Extract optical flows with multi-gpu support.")
-    parser.add_argument("vid_txt_path", type=str, help='Input txt files containing video paths')
-    parser.add_argument("out_dir", type=str, help='Destination directory to store flow results')
+    parser.add_argument("vid_txt_path", type=str, help='Input txt files containing video paths.')
+    parser.add_argument("out_dir", type=str, help='Destination directory to store flow results.')
 
-    parser.add_argument("--flow_type", type=str, default='tvl1', choices=['tvl1', 'warp_tvl1'], help='Optical flow type.')
-    parser.add_argument("--out_fmt", type=str, default='dir', choices=['dir','zip'], help='Output file format.')
-    parser.add_argument("--num_gpu", type=int, default=4, help='Number of GPUs')
-    parser.add_argument("--step", type=int, default=1, help='Specify the step for frame sampling')
-    parser.add_argument("--keep_frames", type=lambda x: (str(x).lower() == 'true'), default=False, help='Whether to save frame data.')
-    parser.add_argument("--width", type=int, default=0, help='Resize image width.')
-    parser.add_argument("--height", type=int, default=0, help='Resize image height.')
+    parser.add_argument("--flow_type", type=str, default='tvl1', choices=['tvl1', 'warp_tvl1'], help='Optical flow type. Default: tvl1')
+    parser.add_argument("--out_fmt", type=str, default='zip', choices=['dir','zip'], help='Output file format. Default: zip')
+    parser.add_argument("--num_gpu", type=int, default=4, help='Number of GPUs. Default: 4')
+    parser.add_argument("--step", type=int, default=1, help='Specify the step for frame sampling. Default: 1')
+    parser.add_argument("--keep_frames", type=lambda x: (str(x).lower() == 'true'), default=False, help='Whether to save frame data. Default: False')
+    parser.add_argument("--width", type=int, default=0, help='Resize image width. Default: 0 (no resize)')
+    parser.add_argument("--height", type=int, default=0, help='Resize image height. Default: 0 (no resize)')
+    parser.add_argument("--log", type=str, default='./out.log', help='Output log file path. Default: ./out.log')
 
     args = parser.parse_args()
     f = open(args.vid_txt_path, 'r').readlines()
@@ -65,12 +76,16 @@ if __name__ == '__main__':
     STEP = args.step
     WIDTH = args.width
     HEIGHT = args.height
+    LOG = args.log
 
     if (WIDTH == 0 and HEIGHT != 0) or (WIDTH != 0 and HEIGHT == 0):
         print '*****' * 20
         print 'WARNING: width and height must be both specified to take effect. Now image will not be resized!'
         print '*****' * 20
 
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s',
+                    datefmt='%a, %d %b %Y %H:%M:%S', filename=LOG, filemode='w')
+    install_mp_handler()
     pool = Pool(NUM_GPU)
     pool.map(calc_tvl1_flow, zip(vid_paths, xrange(VID_NUM)))
     pool.close()

@@ -104,7 +104,7 @@ Example:
 
 Example:
 
-```python
+```
 python multi_gpu_extract.py /data/video_list.txt /data/results --flow_type tvl1 --out_fmt zip --num_gpu 4 --step 1 --keep_frames True --width 100 --height 100 --log /data/log.log
 ```
 
